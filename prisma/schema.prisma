@@ -10,3 +10,69 @@ datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")
 }
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  documents Document[]
+  chats     Chat[]
+}
+
+model Document {
+  id        String   @id @default(cuid())
+  fileName  String
+  fileUrl   String
+  fileSize  Int
+  pageCount Int
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  chats       Chat[]
+  annotations Annotation[]
+}
+
+model Chat {
+  id         String   @id @default(cuid())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  messages    Message[]
+  annotations Annotation[]
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  chatId         String
+  chat           Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  role           String // 'user' or 'assistant'
+  content        String //@db.Text
+  audioUrl       String?
+  pageReferences Json? // Store page numbers referenced
+  createdAt      DateTime @default(now())
+}
+
+model Annotation {
+  id          String   @id @default(cuid())
+  documentId  String
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  chatId      String
+  chat        Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  pageNumber  Int
+  type        String // 'highlight', 'circle', 'underline'
+  coordinates Json // Store x, y, width, height
+  color       String
+  text        String?
+  createdAt   DateTime @default(now())
+}
