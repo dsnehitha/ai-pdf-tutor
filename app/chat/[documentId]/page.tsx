@@ -2,7 +2,7 @@
 
 import { useChat } from 'ai/react';
 import { use, useState, useEffect, useRef, Suspense } from 'react';
-import { Send, Mic, MicOff } from 'lucide-react';
+import { Send, Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import dynamic from 'next/dynamic';
 
@@ -26,10 +26,15 @@ export default function ChatPage({
   const [chunkMetadata, setChunkMetadata] = useState<any[]>([]);
   const [lastQueryChunks, setLastQueryChunks] = useState<any[]>([]);
   const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+  const [voiceMode, setVoiceMode] = useState(false);
   const [initialMessages, setInitialMessages] = useState<any[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const recognitionRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const synthRef = useRef<SpeechSynthesis | null>(null);
+  const lastMessageCountRef = useRef(0);
 
   const { messages, input, handleInputChange, handleSubmit, isLoading, setInput, setMessages } = useChat({
     api: '/api/chat',
@@ -49,13 +54,26 @@ export default function ChatPage({
       } catch (error) {
         console.error('Failed to fetch chunk metadata:', error);
       }
+
+      // Auto-play response in voice mode
+      if (voiceMode && message.role === 'assistant') {
+        setTimeout(() => {
+          speakMessage(message.id, message.content, true);
+        }, 300);
+      }
     }
   });
 
   // Custom handler to clear highlights when user submits a new question
   const handleFormSubmit = (e: React.FormEvent) => {
-    // Clear existing highlights when a new question is submitted
     setAnnotations([]);
+    
+    if (isSpeaking) {
+      synthRef.current?.cancel();
+      setIsSpeaking(false);
+      setSpeakingMessageId(null);
+    }
+    
     handleSubmit(e);
   };
 
@@ -153,7 +171,7 @@ export default function ChatPage({
     loadDocumentAndChat();
   }, [documentId, setMessages]);
 
-  // Initialize speech recognition
+  // Initialize speech recognition (STT)
   useEffect(() => {
     if (typeof window !== 'undefined' && 'webkitSpeechRecognition' in window) {
       const SpeechRecognition = (window as any).webkitSpeechRecognition;
@@ -181,14 +199,133 @@ export default function ChatPage({
     }
   }, [setInput]);
 
+  // Initialize speech synthesis (TTS)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      synthRef.current = window.speechSynthesis;
+      
+      // Load voices
+      const loadVoices = () => {
+        if (synthRef.current) {
+          synthRef.current.getVoices();
+        }
+      };
+      
+      loadVoices();
+      if (synthRef.current.onvoiceschanged !== undefined) {
+        synthRef.current.onvoiceschanged = loadVoices;
+      }
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (synthRef.current) {
+        synthRef.current.cancel();
+      }
+    };
+  }, []);
+
+  // Stop speaking when user starts typing or listening
+  useEffect(() => {
+    if (input && isSpeaking) {
+      synthRef.current?.cancel();
+      setIsSpeaking(false);
+      setSpeakingMessageId(null);
+    }
+  }, [input, isSpeaking]);
+
+  useEffect(() => {
+    if (isListening && isSpeaking) {
+      synthRef.current?.cancel();
+      setIsSpeaking(false);
+      setSpeakingMessageId(null);
+    }
+  }, [isListening, isSpeaking]);
+
   const toggleListening = () => {
     if (isListening) {
       recognitionRef.current?.stop();
       setIsListening(false);
+      setVoiceMode(false);
     } else {
+      // Stop any speaking when starting to listen
+      if (isSpeaking) {
+        synthRef.current?.cancel();
+        setIsSpeaking(false);
+        setSpeakingMessageId(null);
+      }
       recognitionRef.current?.start();
       setIsListening(true);
+      setVoiceMode(true);
     }
+  };
+
+  const speakMessage = (messageId: string, text: string, autoMode = false) => {
+    if (!synthRef.current) return;
+
+    // If currently speaking this message, stop it
+    if (isSpeaking && speakingMessageId === messageId) {
+      synthRef.current.cancel();
+      setIsSpeaking(false);
+      setSpeakingMessageId(null);
+      return;
+    }
+
+    // Stop any current speech
+    synthRef.current.cancel();
+
+    // Clean the text (remove metadata tags)
+    const cleanText = text
+      .replace(/\[PAGE:\s*\d+\]/g, '')
+      .replace(/\[HIGHLIGHT:[^\]]+\]/g, '')
+      .trim();
+
+    if (!cleanText) return;
+
+    // Get best available voice (prefer natural-sounding ones)
+    const voices = synthRef.current.getVoices();
+    const preferredVoice = voices.find(v => 
+      v.lang.startsWith('en') && (
+        v.name.includes('Natural') || 
+        v.name.includes('Premium') ||
+        v.name.includes('Enhanced') ||
+        v.name.includes('Google')
+      )
+    ) || voices.find(v => v.lang.startsWith('en')) || voices[0];
+
+    // Create and configure speech
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.rate = 0.95; // Slightly slower for clarity
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+    if (preferredVoice) {
+      utterance.voice = preferredVoice;
+    }
+
+    utterance.onstart = () => {
+      setIsSpeaking(true);
+      setSpeakingMessageId(messageId);
+    };
+
+    utterance.onend = () => {
+      setIsSpeaking(false);
+      setSpeakingMessageId(null);
+      
+      // In voice mode, automatically start listening again after AI response
+      if (autoMode && voiceMode && !isListening) {
+        setTimeout(() => {
+          recognitionRef.current?.start();
+          setIsListening(true);
+        }, 500);
+      }
+    };
+
+    utterance.onerror = () => {
+      setIsSpeaking(false);
+      setSpeakingMessageId(null);
+    };
+
+    synthRef.current.speak(utterance);
   };
 
   const handlePageChange = (page: number) => {
@@ -250,17 +387,38 @@ export default function ChatPage({
             >
               {/* Only render if there's content to show */}
               {m.content && (
-                <div
-                  className={`inline-block p-3 rounded-lg max-w-[80%] ${
-                    m.role === 'user'
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-200 text-gray-800'
-                  }`}
-                >
-                  {/* Remove metadata tags from displayed content */}
-                  {m.role === 'assistant' 
-                    ? m.content.replace(/\[PAGE:\s*\d+\]/g, '').replace(/\[HIGHLIGHT:[^\]]+\]/g, '').trim()
-                    : m.content}
+                <div className={`${m.role === 'user' ? 'flex justify-end' : 'flex justify-start'} items-start gap-2`}>
+                  <div
+                    className={`inline-block p-3 rounded-lg max-w-[80%] ${
+                      m.role === 'user'
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-gray-200 text-gray-800'
+                    }`}
+                  >
+                    {/* Remove metadata tags from displayed content */}
+                    {m.role === 'assistant' 
+                      ? m.content.replace(/\[PAGE:\s*\d+\]/g, '').replace(/\[HIGHLIGHT:[^\]]+\]/g, '').trim()
+                      : m.content}
+                  </div>
+                  
+                  {/* Text-to-Speech button for assistant messages */}
+                  {m.role === 'assistant' && (
+                    <button
+                      onClick={() => speakMessage(m.id, m.content)}
+                      className={`p-2 rounded-lg transition-colors ${
+                        speakingMessageId === m.id
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-gray-300 text-gray-700 hover:bg-gray-400'
+                      }`}
+                      title={speakingMessageId === m.id ? 'Stop speaking' : 'Read aloud'}
+                    >
+                      {speakingMessageId === m.id ? (
+                        <VolumeX size={18} />
+                      ) : (
+                        <Volume2 size={18} />
+                      )}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -284,7 +442,7 @@ export default function ChatPage({
             <input
               value={input}
               onChange={handleInputChange}
-              placeholder="Ask about the PDF..."
+              placeholder={voiceMode ? "Voice mode active - speak or type..." : "Ask about the PDF..."}
               className="flex-1 p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
               disabled={isLoading}
             />
