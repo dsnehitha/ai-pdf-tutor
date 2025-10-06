@@ -8,15 +8,20 @@
     "start": "next start"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^1.0.0",
+    "@ai-sdk/react": "^1.0.0",
     "@prisma/client": "^6.16.3",
+    "ai": "^4.0.0",
     "bcryptjs": "^3.0.2",
+    "lucide-react": "^0.544.0",
     "next": "15.5.4",
     "next-auth": "^4.24.11",
-    "pdfjs-dist": "^5.4.149",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^5.4.296",
     "prisma": "^6.16.3",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "react-pdf": "^10.1.0"
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
