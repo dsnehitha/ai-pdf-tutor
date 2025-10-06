@@ -11,7 +11,7 @@ interface TextMatch {
 interface PDFHighlighterProps {
   searchTexts: string[];
   currentPage: number;
-  containerRef: React.RefObject<HTMLDivElement>;
+  containerRef: React.RefObject<HTMLDivElement | null>;
 }
 
 export default function PDFHighlighter({ searchTexts, currentPage, containerRef }: PDFHighlighterProps) {
