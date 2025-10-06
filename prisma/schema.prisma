@@ -1,21 +1,23 @@
 generator client {
-  provider = "prisma-client-js"
-  output   = "../app/generated/prisma"
+  provider        = "prisma-client-js"
+  output          = "../app/generated/prisma"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
+  id        String     @id @default(cuid())
+  email     String     @unique
   password  String
   name      String?
   documents Document[]
   chats     Chat[]
-  createdAt DateTime @default(now())
+  createdAt DateTime   @default(now())
 }
 
 model Document {
@@ -26,23 +28,26 @@ model Document {
   url       String
   chunks    Chunk[]
   chats     Chat[]
-  metadata  String?  // Store PDF metadata like page count, dimensions
+  metadata  String? // Store PDF metadata like page count, dimensions
   createdAt DateTime @default(now())
-  
+
   @@index([userId])
 }
 
 model Chunk {
-  id         String   @id @default(cuid())
+  id         String                       @id @default(cuid())
   documentId String
-  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  content    String
+  document   Document                     @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  content    String                       @db.Text
   pageNumber Int
-  embedding  String   // Store as JSON string for SQLite
-  metadata   String?  // Store chunk position, coordinates as JSON
-  createdAt  DateTime @default(now())
-  
+  embedding  Unsupported("vector(1536)")? // OpenAI embeddings dimension
+  metadata   Json? // Store position, bounds for annotations
+  startIndex Int // Character position in page
+  endIndex   Int // Character position in page
+  createdAt  DateTime                     @default(now())
+
   @@index([documentId])
+  @@index([pageNumber])
 }
 
 model Chat {
@@ -55,7 +60,7 @@ model Chat {
   messages   Message[]
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
-  
+
   @@index([userId])
   @@index([documentId])
 }
@@ -64,10 +69,10 @@ model Message {
   id        String   @id @default(cuid())
   chatId    String
   chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  role      String   // 'user' or 'assistant'
-  content   String
-  metadata  String?  // Store tool invocations, annotations
+  role      String // 'user' or 'assistant'
+  content   String   @db.Text
+  metadata  Json? // Store tool invocations, annotations
   createdAt DateTime @default(now())
-  
+
   @@index([chatId])
 }
