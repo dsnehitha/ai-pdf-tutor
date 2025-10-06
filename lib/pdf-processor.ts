@@ -1,5 +1,5 @@
 import { PDFDocument } from 'pdf-lib';
-import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import * as pdfjsLib from 'pdfjs-dist';
 import { embedMany } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { prisma } from '@/lib/prisma';
@@ -47,8 +47,9 @@ async function extractTextFromPDF(buffer: Buffer): Promise<{
   }> 
 }> {
   const uint8Array = new Uint8Array(buffer);
-  const loadingTask = getDocument({
+  const loadingTask = pdfjsLib.getDocument({
     data: uint8Array,
+    useSystemFonts: true,
     useWorkerFetch: false,
     isEvalSupported: false,
   });
