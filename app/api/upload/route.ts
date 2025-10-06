@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
+import { put } from '@vercel/blob';
 import { prisma } from '@/lib/prisma';
 import { processPDF } from '@/lib/pdf-processor';
 import { getServerSession } from 'next-auth';
@@ -32,19 +31,19 @@ export async function POST(req: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
     
-    const uploadDir = join(process.cwd(), 'public', 'uploads');
-    await mkdir(uploadDir, { recursive: true });
-    
-    const fileName = `${Date.now()}.pdf`;
-    const filePath = join(uploadDir, fileName);
-    await writeFile(filePath, buffer);
+    // Upload to Vercel Blob
+    const fileName = `${user.id}/${Date.now()}-${file.name}`;
+    const blob = await put(fileName, buffer, {
+      access: 'public',
+      contentType: 'application/pdf',
+    });
 
     // Create document record with user association
     const document = await prisma.document.create({
       data: {
         userId: user.id,
         filename: file.name,
-        url: `/uploads/${fileName}`
+        url: blob.url
       }
     });
 
@@ -62,7 +61,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ 
       id: document.id,
-      url: `/uploads/${fileName}`
+      url: blob.url
     });
   } catch (error) {
     console.error('Upload API error:', error);
