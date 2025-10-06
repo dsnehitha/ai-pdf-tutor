@@ -69,16 +69,6 @@ export async function POST(req: Request) {
       5 // Get top 5 most relevant chunks
     );
     
-    console.log('Chat API - Processing with RAG:', {
-      query: lastMessage.content,
-      documentId,
-      chunksFound: relevantChunks.length,
-      chunks: relevantChunks.map(c => ({
-        page: c.pageNumber,
-        similarity: c.similarity.toFixed(4),
-        preview: c.content.substring(0, 50) + '...'
-      }))
-    });
     
     // Build context from relevant chunks
     const context = relevantChunks
@@ -101,7 +91,8 @@ export async function POST(req: Request) {
       chunks: relevantChunks.map(chunk => ({
         page: chunk.pageNumber,
         snippet: chunk.content.substring(0, 100),
-        similarity: chunk.similarity
+        similarity: chunk.similarity,
+        metadata: chunk.metadata // Include position metadata
       }))
     };
     
@@ -122,7 +113,13 @@ export async function POST(req: Request) {
         
         At the end of your response, include metadata in this format:
         [PAGE: X] - to indicate the primary page being discussed
-        [HIGHLIGHT: page X, "text to highlight"] - to indicate important text to highlight`,
+        [HIGHLIGHT: page X, "exact text"] - to indicate important text to highlight
+        
+        CRITICAL FOR HIGHLIGHTS:
+        - The text in [HIGHLIGHT: page X, "text"] must be EXACTLY as it appears in the PDF
+        - Copy text word-for-word from the context provided above
+        - Use shorter phrases (10-20 words) that are exact matches from the document
+        - Do not paraphrase or modify the text - it must be an exact match`,
       onFinish: async (result) => {
         // Save assistant message to database
         const { text } = result;

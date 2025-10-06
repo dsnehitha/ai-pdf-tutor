@@ -17,7 +17,6 @@ export async function findRelevantChunks(
   limit = 5
 ): Promise<RelevantChunk[]> {
   try {
-    console.log('Searching for relevant chunks:', { query, documentId, limit });
     
     // Generate embedding for the query
     const { embedding: queryEmbedding } = await embed({
@@ -45,17 +44,6 @@ export async function findRelevantChunks(
       ORDER BY embedding <=> ${queryEmbedding}::vector
       LIMIT ${limit}
     `;
-    
-    console.log(`Found ${results.length} relevant chunks with pgvector`);
-    
-    // Log the results for debugging
-    results.forEach((chunk, index) => {
-      console.log(`Chunk ${index + 1}:`, {
-        page: chunk.pageNumber,
-        similarity: chunk.similarity.toFixed(4),
-        preview: chunk.content.substring(0, 100) + '...'
-      });
-    });
     
     return results.map(chunk => ({
       content: chunk.content,

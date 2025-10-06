@@ -25,6 +25,8 @@ export default function ChatPage({
   const [totalPages, setTotalPages] = useState(0);
   const [annotations, setAnnotations] = useState<any[]>([]);
   const [chatId, setChatId] = useState<string | null>(null);
+  const [chunkMetadata, setChunkMetadata] = useState<any[]>([]);
+  const [lastQueryChunks, setLastQueryChunks] = useState<any[]>([]);
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
 
@@ -34,8 +36,27 @@ export default function ChatPage({
     initialMessages: [],
     onError: (error) => {
       console.error('Chat error:', error);
+    },
+    onFinish: async (message) => {
+      // After message is complete, fetch the metadata for the last query
+      try {
+        const response = await fetch(`/api/documents/${documentId}/chunks?query=${encodeURIComponent(input)}`);
+        if (response.ok) {
+          const data = await response.json();
+          setLastQueryChunks(data.chunks || []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch chunk metadata:', error);
+      }
     }
   });
+
+  // Custom handler to clear highlights when user submits a new question
+  const handleFormSubmit = (e: React.FormEvent) => {
+    // Clear existing highlights when a new question is submitted
+    setAnnotations([]);
+    handleSubmit(e);
+  };
 
   // Process messages to extract metadata and control PDF viewer
   useEffect(() => {
@@ -52,39 +73,42 @@ export default function ChatPage({
       if (pageMatch) {
         const pageNum = parseInt(pageMatch[1]);
         if (pageNum !== currentPage && pageNum > 0) {
-          console.log('Navigating to page', pageNum);
           setCurrentPage(pageNum);
         }
       }
       
-      // Extract highlights
+      // Extract highlights - simplified to just extract text
       const highlightRegex = /\[HIGHLIGHT:\s*page\s*(\d+),\s*"([^"]+)"\]/g;
       const newAnnotations: any[] = [];
       let match;
       
       while ((match = highlightRegex.exec(content)) !== null) {
         const page = parseInt(match[1]);
-        const text = match[2];
+        const highlightText = match[2];
         
+        // Create highlight annotation with just the text
+        // The PDFHighlighter component will find the actual position
         newAnnotations.push({
           id: `anno-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           page,
           type: 'highlight',
-          text,
-          x: 10,
-          y: 20,
-          width: 80,
-          height: 15,
-          color: 'yellow'
+          text: highlightText, // Keep original text for accurate searching
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 100,
+          color: 'yellow',
+          messageId: latestAssistantMessage.id // Track which message created this highlight
         });
       }
       
-      if (newAnnotations.length > 0) {
-        console.log('Adding annotations:', newAnnotations);
-        setAnnotations(prev => [...prev, ...newAnnotations]);
-      }
+      // Always clear all previous highlights and set only the new ones
+      setAnnotations(newAnnotations);
+    } else {
+      // If there's no assistant message or content, clear all annotations
+      setAnnotations([]);
     }
-  }, [messages]);
+  }, [messages]); // Remove other dependencies to ensure it only runs when messages change
 
   useEffect(() => {
     if (!session) {
@@ -216,7 +240,7 @@ export default function ChatPage({
           )}
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 border-t">
+        <form onSubmit={handleFormSubmit} className="p-4 border-t">
           <div className="flex gap-2">
             <input
               value={input}

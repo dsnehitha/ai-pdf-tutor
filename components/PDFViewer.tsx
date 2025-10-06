@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
+import PDFHighlighter from './PDFHighlighter';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
@@ -13,11 +14,12 @@ interface Annotation {
   page: number;
   type: 'highlight' | 'circle' | 'underline';
   text: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+  x: number; // Percentage of page width
+  y: number; // Percentage of page height
+  width: number; // Percentage of page width
+  height: number; // Percentage of page height
   color: string;
+  metadata?: any; // Original chunk metadata
 }
 
 interface PDFViewerProps {
@@ -32,6 +34,9 @@ export default function PDFViewer({ url, currentPage, annotations = [], onPageCh
   const [numPages, setNumPages] = useState<number>(0);
   const [pageWidth, setPageWidth] = useState<number>(600);
   const [pageHeight, setPageHeight] = useState<number>(800);
+  const [scale, setScale] = useState<number>(1);
+  const pageRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
     setNumPages(numPages);
@@ -42,21 +47,28 @@ export default function PDFViewer({ url, currentPage, annotations = [], onPageCh
 
   function onPageLoadSuccess(page: any) {
     const viewport = page.getViewport({ scale: 1 });
-    setPageHeight(viewport.height * (pageWidth / viewport.width));
+    const calculatedScale = pageWidth / viewport.width;
+    setScale(calculatedScale);
+    setPageHeight(viewport.height * calculatedScale);
   }
 
   // Filter annotations for current page
   const currentAnnotations = annotations.filter(a => a.page === currentPage);
+  
+  // Extract texts to highlight from annotations
+  const highlightTexts = currentAnnotations
+    .filter(a => a.type === 'highlight')
+    .map(a => a.text);
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex-1 overflow-auto bg-gray-50 flex justify-center relative">
+      <div className="flex-1 overflow-auto bg-gray-50 flex justify-center" ref={containerRef}>
         <Document
           file={url}
           onLoadSuccess={onDocumentLoadSuccess}
           loading={<div className="text-gray-500">Loading PDF...</div>}
         >
-          <div className="relative">
+          <div className="relative inline-block" ref={pageRef}>
             <Page 
               pageNumber={currentPage} 
               width={pageWidth}
@@ -65,33 +77,49 @@ export default function PDFViewer({ url, currentPage, annotations = [], onPageCh
               onLoadSuccess={onPageLoadSuccess}
             />
             
-            {/* Render annotations overlay */}
-            {currentAnnotations.map(annotation => (
-              <div
-                key={annotation.id}
-                className="absolute pointer-events-none"
-                style={{
-                  left: `${(annotation.x / 100) * pageWidth}px`,
-                  top: `${(annotation.y / 100) * pageHeight}px`,
-                  width: `${(annotation.width / 100) * pageWidth}px`,
-                  height: `${(annotation.height / 100) * pageHeight}px`,
-                  backgroundColor: annotation.type === 'highlight' 
-                    ? 'rgba(255, 255, 0, 0.3)' 
-                    : 'transparent',
-                  border: annotation.type === 'circle' 
-                    ? '3px solid red' 
-                    : annotation.type === 'underline' 
-                    ? 'none' 
-                    : 'none',
-                  borderBottom: annotation.type === 'underline' 
-                    ? '3px solid red' 
-                    : 'none',
-                  borderRadius: annotation.type === 'circle' ? '50%' : '0',
-                  zIndex: 10
-                }}
-                title={annotation.text}
+            {/* Text-based highlighting - render after page loads */}
+            {highlightTexts.length > 0 && (
+              <PDFHighlighter
+                searchTexts={highlightTexts}
+                currentPage={currentPage}
+                containerRef={pageRef}
               />
-            ))}
+            )}
+            
+            {/* Render other annotations (circles, underlines) */}
+            {currentAnnotations
+              .filter(a => a.type !== 'highlight')
+              .map(annotation => {
+                // Use percentages for responsive positioning
+                const left = annotation.x;
+                const top = annotation.y;
+                const width = annotation.width;
+                const height = annotation.height;
+                
+                return (
+                  <div
+                    key={annotation.id}
+                    className="absolute pointer-events-none"
+                    style={{
+                      left: `${left}%`,
+                      top: `${top}%`,
+                      width: `${width}%`,
+                      height: `${height}%`,
+                      backgroundColor: 'transparent',
+                      border: annotation.type === 'circle' 
+                        ? '3px solid #FF5722' 
+                        : 'none',
+                      borderBottom: annotation.type === 'underline' 
+                        ? '3px solid #FF5722' 
+                        : 'none',
+                      borderRadius: annotation.type === 'circle' ? '50%' : '2px',
+                      zIndex: 10,
+                      transition: 'all 0.3s ease'
+                    }}
+                    title={annotation.text}
+                  />
+                );
+              })}
           </div>
         </Document>
       </div>

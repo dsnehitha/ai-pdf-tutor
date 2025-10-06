@@ -14,6 +14,12 @@ interface ChunkMetadata {
   height: number;
   pageWidth: number;
   pageHeight: number;
+  textBounds?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }[];
 }
 
 interface TextChunk {
@@ -24,8 +30,22 @@ interface TextChunk {
   metadata: ChunkMetadata;
 }
 
-// Extract text from PDF using pdfjs-dist
-async function extractTextFromPDF(buffer: Buffer): Promise<{ pages: Array<{ text: string; width: number; height: number }> }> {
+// Extract text from PDF using pdfjs-dist with bounding boxes
+async function extractTextFromPDF(buffer: Buffer): Promise<{ 
+  pages: Array<{ 
+    text: string; 
+    width: number; 
+    height: number;
+    textItems: Array<{
+      str: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      transform: number[];
+    }>;
+  }> 
+}> {
   const uint8Array = new Uint8Array(buffer);
   const loadingTask = getDocument({
     data: uint8Array,
@@ -41,8 +61,24 @@ async function extractTextFromPDF(buffer: Buffer): Promise<{ pages: Array<{ text
     const textContent = await page.getTextContent();
     const viewport = page.getViewport({ scale: 1.0 });
     
-    // Extract text with proper spacing
+    // Extract text items with position data
     const textItems = textContent.items as any[];
+    const processedItems = textItems.map(item => {
+      // Get bounding box from transform matrix
+      const tx = item.transform[4];
+      const ty = item.transform[5];
+      const fontSize = Math.sqrt(item.transform[0] * item.transform[0] + item.transform[1] * item.transform[1]);
+      
+      return {
+        str: item.str,
+        x: tx,
+        y: viewport.height - ty - fontSize, // Convert from PDF coords (bottom-left) to top-left
+        width: item.width || (item.str.length * fontSize * 0.5),
+        height: item.height || fontSize,
+        transform: item.transform
+      };
+    });
+    
     const pageText = textItems
       .map(item => item.str)
       .join(' ')
@@ -52,19 +88,27 @@ async function extractTextFromPDF(buffer: Buffer): Promise<{ pages: Array<{ text
     pages.push({
       text: pageText,
       width: viewport.width,
-      height: viewport.height
+      height: viewport.height,
+      textItems: processedItems
     });
   }
   
   return { pages };
 }
 
-// Create overlapping chunks for better context preservation
+// Create overlapping chunks with text position tracking
 function createOverlappingChunks(
   text: string,
   pageNumber: number,
   pageWidth: number,
   pageHeight: number,
+  textItems: Array<{
+    str: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }>,
   chunkSize: number = 400,
   overlap: number = 100
 ): TextChunk[] {
@@ -72,6 +116,21 @@ function createOverlappingChunks(
   const words = text.split(/\s+/).filter(w => w.length > 0);
   
   if (words.length === 0) return [];
+  
+  // Map words to their text items for position tracking
+  const wordToTextItem = new Map<string, typeof textItems[0]>();
+  let textItemIndex = 0;
+  for (const word of words) {
+    // Find corresponding text item
+    while (textItemIndex < textItems.length) {
+      const item = textItems[textItemIndex];
+      if (item.str.includes(word)) {
+        wordToTextItem.set(word, item);
+        break;
+      }
+      textItemIndex++;
+    }
+  }
   
   let currentPosition = 0;
   
@@ -84,6 +143,35 @@ function createOverlappingChunks(
     const chunkText = chunkWords.join(' ');
     
     if (chunkText.length > 50) { // Minimum chunk length
+      // Calculate bounding box for this chunk
+      let minX = pageWidth, minY = pageHeight, maxX = 0, maxY = 0;
+      const textBounds: any[] = [];
+      
+      for (const word of chunkWords) {
+        const item = wordToTextItem.get(word);
+        if (item) {
+          minX = Math.min(minX, item.x);
+          minY = Math.min(minY, item.y);
+          maxX = Math.max(maxX, item.x + item.width);
+          maxY = Math.max(maxY, item.y + item.height);
+          
+          textBounds.push({
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height
+          });
+        }
+      }
+      
+      // If we couldn't find positions, use estimates
+      if (minX === pageWidth) {
+        minX = 0;
+        minY = (currentPosition / words.length) * pageHeight;
+        maxX = pageWidth;
+        maxY = minY + ((chunkSize / words.length) * pageHeight);
+      }
+      
       chunks.push({
         content: chunkText,
         pageNumber,
@@ -91,12 +179,13 @@ function createOverlappingChunks(
         endIndex: Math.min(currentPosition + chunkSize, words.length),
         metadata: {
           pageNumber,
-          x: 0,
-          y: (currentPosition / words.length) * pageHeight,
-          width: pageWidth,
-          height: (chunkSize / words.length) * pageHeight,
+          x: minX,
+          y: minY,
+          width: maxX - minX,
+          height: maxY - minY,
           pageWidth,
-          pageHeight
+          pageHeight,
+          textBounds: textBounds.length > 0 ? textBounds : undefined
         }
       });
     }
@@ -109,12 +198,10 @@ function createOverlappingChunks(
 }
 
 export async function processPDF(buffer: Buffer, documentId: string) {
-  console.log('Starting PDF processing for document:', documentId);
   
   try {
-    // Extract text from PDF
+    // Extract text from PDF with position data
     const { pages } = await extractTextFromPDF(buffer);
-    console.log(`Extracted text from ${pages.length} pages`);
     
     // Get basic metadata using pdf-lib
     const pdfDoc = await PDFDocument.load(buffer);
@@ -128,12 +215,11 @@ export async function processPDF(buffer: Buffer, documentId: string) {
         page.text,
         pageIndex + 1,
         page.width,
-        page.height
+        page.height,
+        page.textItems
       );
       allChunks.push(...pageChunks);
     });
-    
-    console.log(`Created ${allChunks.length} chunks from PDF`);
     
     // If no chunks created, create at least one
     if (allChunks.length === 0) {
@@ -165,7 +251,6 @@ export async function processPDF(buffer: Buffer, documentId: string) {
         values: batch.map(c => c.content)
       });
       embeddings.push(...batchEmbeddings);
-      console.log(`Generated embeddings for batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(allChunks.length / batchSize)}`);
     }
     
     // Store chunks with embeddings using raw SQL for vector type
@@ -202,8 +287,6 @@ export async function processPDF(buffer: Buffer, documentId: string) {
       `;
       storedChunks.push(result);
     }
-    
-    console.log(`Stored ${storedChunks.length} chunks in database`);
     
     // Store document metadata
     const metadata = {
