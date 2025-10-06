@@ -424,8 +424,7 @@ export default function ChatPage({
             </div>
           ))}
           
-          {/* Show loading indicator */}
-          {isLoading && (
+          {isLoading && messages.length > 0 && messages[messages.length - 1].role !== 'assistant' && (
             <div className="text-left">
               <div className="inline-block p-3 rounded-lg bg-gray-200 text-gray-800">
                 <span className="animate-pulse">AI is thinking...</span>

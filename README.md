@@ -1,36 +1,129 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI PDF Tutor
 
-## Getting Started
+An interactive AI tutor that helps students understand PDF documents through a split-screen interface with real-time chat, voice interaction, and PDF annotation capabilities.
 
-First, run the development server:
+![Next.js](https://img.shields.io/badge/Next.js-15.5.4-black)
+![React](https://img.shields.io/badge/React-19.1.0-blue)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
+![Prisma](https://img.shields.io/badge/Prisma-6.16.3-purple)
+![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4-green)
+
+## 🚀 Quick Start
 
 ```bash
+# Clone repository
+git clone https://github.com/your-username/ai-pdf-tutor.git
+cd ai-pdf-tutor
+
+# Install dependencies
+npm install
+
+# Setup environment
+cp .env.example .env
+# Edit .env with your credentials
+
+# Setup database
+npx prisma generate
+npx prisma db push
+
+# Run development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Visit [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 📚 Documentation
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+For detailed setup guide, deployment, and documentation, see [PROJECT_DOCUMENTATION.md](./PROJECT_DOCUMENTATION.md)
 
-## Learn More
+## ✨ Features
 
-To learn more about Next.js, take a look at the following resources:
+### Core Functionality
+- 🔐 **Secure Authentication** - Email/password with JWT sessions
+- 📄 **PDF Management** - Upload, store, and organize documents
+- 💬 **AI Chat** - Context-aware responses using GPT-4
+- 🎯 **Smart Annotations** - AI highlights relevant PDF sections
+- 🎤 **Voice Interaction** - Speech-to-text and text-to-speech
+- 📊 **Chat History** - Persistent conversation storage
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Technical Highlights
+- Split-screen interface with responsive design
+- Real-time streaming responses
+- Vector similarity search with pgvector
+- Automatic PDF text extraction and chunking
+- Page navigation controlled by AI
+- Vercel Blob storage for PDFs
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🛠️ Tech Stack
 
-## Deploy on Vercel
+| Category | Technologies |
+|----------|-------------|
+| **Frontend** | Next.js 15, React 19, Tailwind CSS |
+| **Backend** | Next.js API Routes, Prisma ORM |
+| **Database** | PostgreSQL with pgvector |
+| **AI/ML** | OpenAI GPT-4, Embeddings API |
+| **Storage** | Vercel Blob |
+| **Auth** | NextAuth.js |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 📋 Prerequisites
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Node.js 18+
+- PostgreSQL with pgvector
+- OpenAI API key
+- Vercel account (for Blob storage)
+
+## 🔧 Environment Variables
+
+```env
+DATABASE_URL="postgresql://..."
+NEXTAUTH_SECRET="your-secret"
+NEXTAUTH_URL="http://localhost:3000"
+OPENAI_API_KEY="sk-..."
+BLOB_READ_WRITE_TOKEN="vercel_blob_..."
+```
+
+## 🚢 Deployment
+
+### Vercel (Recommended)
+
+1. Push to GitHub
+2. Import to Vercel
+3. Add environment variables
+4. Connect Blob storage
+5. Deploy
+
+See [PROJECT_DOCUMENTATION.md](./PROJECT_DOCUMENTATION.md) for detailed steps.
+
+### Database Options
+
+- **Local**: PostgreSQL with pgvector extension
+- **Hosted**: Supabase, Neon, or Vercel Postgres
+
+## 📁 Project Structure
+
+```
+├── app/           # Next.js App Router
+├── components/    # React components
+├── lib/          # Utilities & services
+├── prisma/       # Database schema
+├── public/       # Static assets
+└── scripts/      # Setup scripts
+```
+
+## 🔐 Security
+
+- Password hashing with bcrypt
+- JWT session management
+- User data isolation
+- Input validation with Zod
+- File type validation
+
+## 📝 API Reference
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/auth/signup` | POST | User registration |
+| `/api/auth/[...nextauth]` | * | Auth handlers |
+| `/api/documents` | GET | List documents |
+| `/api/upload` | POST | Upload PDF |
+| `/api/chat` | POST | Send message |
