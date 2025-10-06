@@ -28,12 +28,15 @@ export default function ChatPage({
   const [chunkMetadata, setChunkMetadata] = useState<any[]>([]);
   const [lastQueryChunks, setLastQueryChunks] = useState<any[]>([]);
   const [isListening, setIsListening] = useState(false);
+  const [initialMessages, setInitialMessages] = useState<any[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const recognitionRef = useRef<any>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const { messages, input, handleInputChange, handleSubmit, isLoading, setInput } = useChat({
+  const { messages, input, handleInputChange, handleSubmit, isLoading, setInput, setMessages } = useChat({
     api: '/api/chat',
     body: { documentId, chatId },
-    initialMessages: [],
+    initialMessages: initialMessages,
     onError: (error) => {
       console.error('Chat error:', error);
     },
@@ -116,24 +119,46 @@ export default function ChatPage({
       return;
     }
     
-    // Fetch document details and set proper PDF URL
-    fetch(`/api/documents/${documentId}`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.url) {
-          setPdfUrl(data.url);
-          if (data.metadata) {
-            const metadata = JSON.parse(data.metadata);
+    const loadDocumentAndChat = async () => {
+      try {
+        setIsLoadingHistory(true);
+        
+        // Fetch document details and set proper PDF URL
+        const docResponse = await fetch(`/api/documents/${documentId}`);
+        const docData = await docResponse.json();
+        
+        if (docData.url) {
+          setPdfUrl(docData.url);
+          if (docData.metadata) {
+            const metadata = JSON.parse(docData.metadata);
             setTotalPages(metadata.pageCount || 0);
           }
         }
+        
         // Load or create chat
-        if (data.chatId) {
-          setChatId(data.chatId);
+        if (docData.chatId) {
+          setChatId(docData.chatId);
+          
+          // Fetch chat history
+          const chatResponse = await fetch(`/api/chat/${docData.chatId}`);
+          if (chatResponse.ok) {
+            const chatData = await chatResponse.json();
+            if (chatData.messages && chatData.messages.length > 0) {
+              setInitialMessages(chatData.messages);
+              // Also set messages directly in useChat
+              setMessages(chatData.messages);
+            }
+          }
         }
-      })
-      .catch(err => console.error('Error loading document:', err));
-  }, [documentId, session, router]);
+      } catch (err) {
+        console.error('Error loading document:', err);
+      } finally {
+        setIsLoadingHistory(false);
+      }
+    };
+    
+    loadDocumentAndChat();
+  }, [documentId, session, router, setMessages]);
 
   // Initialize speech recognition
   useEffect(() => {
@@ -179,6 +204,11 @@ export default function ChatPage({
     }
   };
 
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
   return (
     <div className="flex h-screen">
       {/* PDF Viewer */}
@@ -205,6 +235,19 @@ export default function ChatPage({
         </div>
         
         <div className="flex-1 overflow-auto p-4 space-y-4">
+          {/* Show loading indicator for chat history */}
+          {isLoadingHistory && messages.length === 0 && (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-gray-500">Loading chat history...</div>
+            </div>
+          )}
+          
+          {!isLoadingHistory && messages.length === 0 && (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-gray-400">Start a conversation by asking a question about the PDF</div>
+            </div>
+          )}
+          
           {messages.map(m => (
             <div
               key={m.id}
@@ -238,6 +281,9 @@ export default function ChatPage({
               </div>
             </div>
           )}
+          
+          {/* Invisible div for auto-scrolling */}
+          <div ref={messagesEndRef} />
         </div>
 
         <form onSubmit={handleFormSubmit} className="p-4 border-t">
