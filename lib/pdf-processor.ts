@@ -46,8 +46,9 @@ async function extractTextFromPDF(buffer: Buffer): Promise<{
     }>;
   }> 
 }> {
-  // Use CDN-hosted worker for serverless environments (Vercel, AWS Lambda, etc.)
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+  // Dynamic worker import for Vercel serverless compatibility
+  // @ts-ignore
+  await import('pdfjs-dist/build/pdf.worker.min.mjs');
   
   const uint8Array = new Uint8Array(buffer);
   const loadingTask = pdfjsLib.getDocument({
