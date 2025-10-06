@@ -4,7 +4,6 @@ import { useChat } from 'ai/react';
 import { use, useState, useEffect, useRef, Suspense } from 'react';
 import { Send, Mic, MicOff } from 'lucide-react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 
 const PDFViewer = dynamic(() => import('@/components/PDFViewer'), {
@@ -19,7 +18,6 @@ export default function ChatPage({
 }) {
   const { documentId } = use(params);
   const { data: session } = useSession();
-  const router = useRouter();
   const [pdfUrl, setPdfUrl] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
@@ -114,11 +112,6 @@ export default function ChatPage({
   }, [messages]); // Remove other dependencies to ensure it only runs when messages change
 
   useEffect(() => {
-    if (!session) {
-      router.push('/auth/signin');
-      return;
-    }
-    
     const loadDocumentAndChat = async () => {
       try {
         setIsLoadingHistory(true);
@@ -158,7 +151,7 @@ export default function ChatPage({
     };
     
     loadDocumentAndChat();
-  }, [documentId, session, router, setMessages]);
+  }, [documentId, setMessages]);
 
   // Initialize speech recognition
   useEffect(() => {

@@ -17,18 +17,14 @@ interface Document {
 }
 
 export default function Dashboard() {
-  const { data: session, status } = useSession();
+  const { data: session } = useSession();
   const router = useRouter();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/auth/signin');
-    } else if (status === 'authenticated') {
-      fetchDocuments();
-    }
-  }, [status, router]);
+    fetchDocuments();
+  }, []);
 
   const fetchDocuments = async () => {
     try {
@@ -73,10 +69,6 @@ export default function Dashboard() {
       setUploading(false);
     }
   };
-
-  if (status === 'loading') {
-    return <div className="flex items-center justify-center h-screen">Loading...</div>;
-  }
 
   return (
     <div className="min-h-screen bg-gray-50">
